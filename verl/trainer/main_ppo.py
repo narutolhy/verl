@@ -29,6 +29,14 @@ from verl.trainer.ppo.reward import load_reward_manager
 from verl.utils.device import is_cuda_available
 from verl.utils.import_utils import load_extern_type
 
+# Adjust the path if necessary
+import sys
+from pathlib import Path
+# Add the project root to the path to allow importing from scripts
+project_root = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(project_root))
+from verl.utils.memory_utils import dump_gpu_memory, enable_memory_viz, dump_memory_snapshot, MemorySnapshotSampler
+
 
 @hydra.main(config_path="config", config_name="ppo_trainer", version_base=None)
 def main(config):
@@ -49,6 +57,8 @@ def run_ppo(config) -> None:
                 for distributed PPO training including Ray initialization settings,
                 model paths, and training hyperparameters.
     """
+
+    enable_memory_viz(trace_alloc_max_entries=600, stack_depth=32)
     # Check if Ray is not initialized
     if not ray.is_initialized():
         # Initialize Ray with a local cluster configuration
@@ -279,7 +289,39 @@ class TaskRunner:
         # Initialize the workers of the trainer.
         trainer.init_workers()
         # Start the training process.
-        trainer.fit()
+        # Start the training process.
+        try:
+            sampler = MemorySnapshotSampler()
+            sampler.start()
+            trainer.fit()
+        except RuntimeError as e:
+            if "out of memory" in str(e):
+                print("Caught OOM error, dumping GPU memory of all workers...")
+
+                # Create a DataProto to pass a tag to the dump function
+
+                # Get all worker groups from the trainer
+                worker_groups = []
+                if hasattr(trainer, "actor_rollout_ref_worker_group"):
+                    worker_groups.append(trainer.actor_rollout_ref_worker_group)
+                if hasattr(trainer, "critic_worker_group"):
+                    worker_groups.append(trainer.critic_worker_group)
+                # Add other worker groups if they exist
+
+                for wg in worker_groups:
+                    if hasattr(wg, "dump_gpu_memory"):
+                        try:
+                            # This will execute dump_gpu_memory on all workers in the group
+                            wg.dump_memory_snapshot()
+                        except Exception as dump_exc:
+                            print(f"Failed to dump memory for a worker group: {dump_exc}")
+
+                print("Finished dumping GPU memory.")
+            raise e
+
+        # Finalize and release resources
+        finally:
+            sampler.stop()
 
 
 def create_rl_dataset(data_paths, data_config, tokenizer, processor, is_train=True):

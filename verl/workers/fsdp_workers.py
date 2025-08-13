@@ -78,6 +78,8 @@ from verl.utils.py_functional import convert_to_regular_types
 from verl.workers.config import FSDPCriticConfig, FSDPEngineConfig, RolloutConfig
 from verl.workers.sharding_manager.fsdp_ulysses import FSDPUlyssesShardingManager
 
+from verl.utils.megatron_utils import dump_memory_snapshot, MemorySnapshotSampler, enable_memory_viz
+
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
 
@@ -111,6 +113,12 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
     This worker can be instantiated as a standalone actor or a standalone rollout or a standalone reference policy
     or a hybrid engine based on the config.rollout
     """
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def dump_memory_snapshot(self):
+        print(f"Dumping memory snapshot on rank {self.rank} due to oom")
+        dump_memory_snapshot(tag="oom")
+        return
 
     def __init__(self, config: DictConfig, role: str, **kwargs):
         Worker.__init__(self)
