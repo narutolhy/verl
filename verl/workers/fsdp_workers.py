@@ -77,8 +77,7 @@ from verl.utils.profiler.performance import reduce_timing, topk_reduce_ratio_min
 from verl.utils.py_functional import convert_to_regular_types
 from verl.workers.config import FSDPCriticConfig, FSDPEngineConfig, RolloutConfig
 from verl.workers.sharding_manager.fsdp_ulysses import FSDPUlyssesShardingManager
-
-from verl.utils.megatron_utils import dump_memory_snapshot, MemorySnapshotSampler, enable_memory_viz
+from verl.utils.memory_utils import dump_memory_snapshot, MemorySnapshotSampler, enable_memory_viz
 
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
