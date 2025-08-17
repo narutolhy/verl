@@ -137,6 +137,11 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
                 init_method=os.environ.get("DIST_INIT_METHOD", None),
             )
 
+        enable_memory_viz(trace_alloc_max_entries=100_000, stack_depth=32)
+        self.memory_sampler = MemorySnapshotSampler(
+            tag=f"periodic_rank_{self.rank}",
+        )
+        self.memory_sampler.start()
         # build device mesh for FSDP
         world_size = torch.distributed.get_world_size()
         # TODO(sgm): support FSDP hybrid shard for larger model
@@ -247,6 +252,9 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         if self._is_ref and self.config.ref.log_prob_micro_batch_size is not None:
             self.config.ref.log_prob_micro_batch_size //= self.device_mesh.size() // self.ulysses_sequence_parallel_size
             self.config.ref.log_prob_micro_batch_size_per_gpu = self.config.ref.log_prob_micro_batch_size
+    
+    def __del__(self):
+        self.memory_sampler.stop()
 
     def _build_model_optimizer(
         self,
